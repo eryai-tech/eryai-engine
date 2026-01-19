@@ -1,0 +1,9 @@
+{
+  "name": "eryai-engine",
+  "version": "1.0.0",
+  "description": "Universal AI engine for all EryAI customers",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "resend": "^2.0.0"
+  }
+}
