@@ -310,20 +310,17 @@ export default async function handler(req, res) {
         { role: 'assistant', content: aiResponse }
       ];
       
-      // Check if we should run analysis
-      if (fullConversation.length >= (analysisConfig.min_messages_before_analysis || 4)) {
-        // Run analysis in background (don't await)
-        runConversationAnalysis(
-          currentSessionId,
-          customer,
-          aiConfig,
-          analysisConfig,
-          actions || [],
-          fullConversation,
-          aiResponse,
-          isTestMode
-        ).catch(err => console.error('Analysis error:', err));
-      }
+      // Run analysis in background (don't await) - trigger check happens inside function
+      runConversationAnalysis(
+        currentSessionId,
+        customer,
+        aiConfig,
+        analysisConfig,
+        actions || [],
+        fullConversation,
+        aiResponse,
+        isTestMode
+      ).catch(err => console.error('Analysis error:', err));
     }
 
     // ============================================
