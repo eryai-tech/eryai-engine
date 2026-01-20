@@ -1,9 +1,6 @@
 {
-  "functions": {
-    "pages/api/*.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
+  "buildCommand": "echo 'No build needed'",
+  "outputDirectory": ".",
   "rewrites": [
     {
       "source": "/chat/:slug",
