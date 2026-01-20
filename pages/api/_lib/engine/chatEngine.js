@@ -19,7 +19,7 @@ import { pushNewGuestMessage } from '../notifications/push.js';
 // ============================================
 // MAIN CHAT ENGINE
 // ============================================
-export async function handleChat({ prompt, history, sessionId, customerId, slug, isTestMode }) {
+export async function handleChat({ prompt, history, sessionId, customerId, slug, isTestMode, suspicious, suspiciousReason }) {
   
   // ============================================
   // STEP 1: Identify customer
@@ -76,6 +76,17 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
       existingSession = newSession;
       console.log(`📝 New session created: ${currentSessionId}`);
     }
+  }
+
+  // ============================================
+  // STEP 3.5: Flag suspicious sessions
+  // ============================================
+  if (suspicious && currentSessionId) {
+    console.warn(`⚠️ [SECURITY] Flagging session ${currentSessionId} as suspicious: ${suspiciousReason}`);
+    await updateSession(currentSessionId, {
+      suspicious: true,
+      suspicious_reason: suspiciousReason
+    });
   }
 
   // ============================================
@@ -188,7 +199,8 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
     customerName: customer.name,
     aiName: aiConfig.ai_name,
     triggeredActions: triggeredActions.map(a => a.action_type),
-    needsHandoff: false
+    needsHandoff: false,
+    suspicious: suspicious || false
   };
 }
 
