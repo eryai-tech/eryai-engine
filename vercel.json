@@ -1,10 +1,19 @@
 {
-  "buildCommand": "echo 'No build needed'",
-  "outputDirectory": ".",
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/chat/:slug",
-      "destination": "/api/chat?slug=:slug"
+      "src": "pages/api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/pages/api/$1"
+    },
+    {
+      "src": "/chat/([^/]+)",
+      "dest": "/pages/api/chat.js?slug=$1"
     }
   ]
 }
