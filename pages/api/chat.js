@@ -1,5 +1,5 @@
 import { handleChat } from './_lib/engine/chatEngine.js';
-// Force redeploy v2
+// Force redeploy v3
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
