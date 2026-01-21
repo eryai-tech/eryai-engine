@@ -15,6 +15,9 @@ import { callGemini, buildChatContents, buildSystemPrompt } from '../ai/gemini.j
 import { shouldRunAnalysis, analyzeConversation, getFiredTriggers } from '../ai/analysis.js';
 import { checkKeywordTriggers, executeActionsForTrigger } from '../actions/executor.js';
 import { pushNewGuestMessage } from '../notifications/push.js';
+import { sendSuperadminAlert } from '../notifications/email.js';
+
+const SUPERADMIN_EMAIL = 'eric@eryai.tech';
 
 // ============================================
 // MAIN CHAT ENGINE
@@ -79,14 +82,36 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   }
 
   // ============================================
-  // STEP 3.5: Flag suspicious sessions
+  // STEP 3.5: Handle suspicious sessions
   // ============================================
   if (suspicious && currentSessionId) {
-    console.warn(`⚠️ [SECURITY] Flagging session ${currentSessionId} as suspicious: ${suspiciousReason}`);
+    console.warn(`🚨 [SECURITY] Suspicious activity detected!`);
+    console.warn(`   Session: ${currentSessionId}`);
+    console.warn(`   Reason: ${suspiciousReason}`);
+    console.warn(`   Prompt: "${prompt.substring(0, 100)}..."`);
+    
+    // Flag session as suspicious and route to superadmin
     await updateSession(currentSessionId, {
       suspicious: true,
-      suspicious_reason: suspiciousReason
+      suspicious_reason: suspiciousReason,
+      routed_to_superadmin: true
     });
+
+    // Send email alert to superadmin
+    try {
+      await sendSuperadminAlert({
+        to: SUPERADMIN_EMAIL,
+        subject: `🚨 [SECURITY] Suspicious Activity - ${customer.name}`,
+        customerName: customer.name,
+        sessionId: currentSessionId,
+        reason: suspiciousReason,
+        prompt: prompt,
+        isTestMode
+      });
+      console.log('✅ Security alert email sent to superadmin');
+    } catch (err) {
+      console.error('❌ Failed to send security alert email:', err.message);
+    }
   }
 
   // ============================================
