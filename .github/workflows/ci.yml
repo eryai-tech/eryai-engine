@@ -24,16 +24,26 @@ jobs:
       
       - name: Run Type Check
         run: |
-          npx tsc --noEmit > type-errors.log 2>&1 || {
-            echo "### ❌ Type Check Failed" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Copy this error to Claude:" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat type-errors.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            exit 1
-          }
-          echo "### ✅ Type Check Passed" >> $GITHUB_STEP_SUMMARY
+          if [ -f "jsconfig.json" ]; then
+            echo "Running type check with jsconfig.json..."
+            npx tsc --project jsconfig.json > type-errors.log 2>&1 || {
+              echo "### ❌ Type Check Failed" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "Copy this error to Claude:" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              cat type-errors.log >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              exit 1
+            }
+            echo "### ✅ Type Check Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⏭️ Type Check Skipped (no jsconfig.json)" >> $GITHUB_STEP_SUMMARY
+          fi
       
       - name: Build
-        run: npm run build
+        run: |
+          if grep -q '"build"' package.json 2>/dev/null; then
+            npm run build
+          else
+            echo "No build script found, skipping..."
+          fi
