@@ -34,24 +34,30 @@ jobs:
             echo "::error::package.json has duplicate devDependencies ($DUPES found)!"
             exit 1
           fi
-          echo "package.json is valid"
+          echo "✅ package.json is valid"
       
       - name: Install dependencies
         run: npm install
       
-      - name: Run Type Check
+      - name: Type Check (JS)
         run: |
           if [ -f "jsconfig.json" ]; then
-            npx tsc --project jsconfig.json --skipLibCheck 2>&1 | head -50 > type-errors.log
+            echo "Running type check..."
+            npx tsc --project jsconfig.json --skipLibCheck --maxNodeModuleJsDepth 0 2>&1 | head -50 > type-errors.log || true
             if [ -s type-errors.log ] && grep -q "error TS" type-errors.log; then
               echo "::error::Type check failed!"
               cat type-errors.log
               exit 1
             fi
+            echo "✅ Type check passed"
+          else
+            echo "⏭️ No jsconfig.json, skipping type check"
           fi
       
       - name: Build
         run: |
           if grep -q '"build"' package.json 2>/dev/null; then
             npm run build
+          else
+            echo "⏭️ No build script, skipping"
           fi
