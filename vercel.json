@@ -12,6 +12,10 @@
       "dest": "/pages/api/chat.js"
     },
     {
+      "src": "/api/greeting",
+      "dest": "/pages/api/greeting.js"
+    },
+    {
       "src": "/api/messages",
       "dest": "/pages/api/messages.js"
     },
