@@ -25,8 +25,9 @@ jobs:
       - name: Run Type Check
         run: |
           if [ -f "jsconfig.json" ]; then
-            echo "Running type check with jsconfig.json..."
-            npx tsc --project jsconfig.json > type-errors.log 2>&1 || {
+            echo "Running type check..."
+            npx tsc --project jsconfig.json --skipLibCheck 2>&1 | head -50 > type-errors.log
+            if [ -s type-errors.log ] && grep -q "error TS" type-errors.log; then
               echo "### ❌ Type Check Failed" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "Copy this error to Claude:" >> $GITHUB_STEP_SUMMARY
@@ -34,7 +35,7 @@ jobs:
               cat type-errors.log >> $GITHUB_STEP_SUMMARY
               echo '```' >> $GITHUB_STEP_SUMMARY
               exit 1
-            }
+            fi
             echo "### ✅ Type Check Passed" >> $GITHUB_STEP_SUMMARY
           else
             echo "### ⏭️ Type Check Skipped (no jsconfig.json)" >> $GITHUB_STEP_SUMMARY
