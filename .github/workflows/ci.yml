@@ -57,7 +57,12 @@ jobs:
       - name: Build
         run: |
           if grep -q '"build"' package.json 2>/dev/null; then
+            echo "Running build..."
             npm run build
+            echo "✅ Build passed"
           else
             echo "⏭️ No build script, skipping"
           fi
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
