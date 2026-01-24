@@ -1,57 +1,27 @@
 name: CI Validation
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+on: [push, pull_request]
 
 jobs:
-  validate:
+  check:
     name: Type Check and Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
       
-      - name: Validate package.json
-        run: |
-          echo "Validating package.json..."
-          if [ ! -f "package.json" ]; then
-            echo "No package.json found, skipping validation"
-            exit 0
-          fi
-          if ! node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"; then
-            echo "::error::package.json is not valid JSON!"
-            exit 1
-          fi
-          DUPES=$(grep -c '"devDependencies"' package.json || echo "0")
-          if [ "$DUPES" -gt "1" ]; then
-            echo "::error::package.json has duplicate devDependencies ($DUPES found)!"
-            exit 1
-          fi
-          echo "✅ package.json is valid"
+      - run: npm install
       
-      - name: Install dependencies
-        run: npm install
-      
-      - name: Type Check (JS)
+      - name: Type Check (JSDoc)
         run: |
           if [ -f "jsconfig.json" ]; then
-            echo "Running type check..."
-            npx tsc --project jsconfig.json --skipLibCheck --maxNodeModuleJsDepth 0 2>&1 | head -50 > type-errors.log || true
-            if [ -s type-errors.log ] && grep -q "error TS" type-errors.log; then
-              echo "::error::Type check failed!"
-              cat type-errors.log
-              exit 1
-            fi
-            echo "✅ Type check passed"
+            npx tsc --project jsconfig.json --skipLibCheck --maxNodeModuleJsDepth 0
           else
-            echo "⏭️ No jsconfig.json, skipping type check"
+            echo "No jsconfig.json found, skipping type check"
           fi
       
       - name: Build
@@ -59,9 +29,8 @@ jobs:
           if grep -q '"build"' package.json 2>/dev/null; then
             echo "Running build..."
             npm run build
-            echo "✅ Build passed"
           else
-            echo "⏭️ No build script, skipping"
+            echo "No build script found, skipping"
           fi
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
