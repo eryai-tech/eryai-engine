@@ -118,27 +118,6 @@ User message to analyze:
   }
 }
 
-/**
- * Quick check if message should be analyzed (saves API calls)
- */
-export function shouldAnalyzeForSecurity(message) {
-  if (!message || message.length < 10) return false;
-  if (message.length > 500) return true; // Long messages always check
-  
-  // Quick regex for obvious red flags (language-neutral patterns)
-  const redFlags = [
-    /ignore.*(?:previous|instruction|rule)/i,
-    /(?:api|secret|password|token).*(?:key|nøkkel|nyckel|schlüssel|clave|chiave)/i,
-    /system.*prompt/i,
-    /database|sql|query/i,
-    /\broot\b|\badmin\b|\bsudo\b/i,
-    /base64|encode|decode/i,
-    /jailbreak|bypass|hack/i,
-  ];
-
-  return redFlags.some(pattern => pattern.test(message));
-}
-
 // ============================================
 // CHECK IF ANALYSIS SHOULD RUN
 // ============================================
