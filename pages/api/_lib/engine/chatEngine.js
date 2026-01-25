@@ -13,17 +13,21 @@ import {
 } from '../db/supabase.js';
 
 import { callGemini, buildChatContents, buildSystemPrompt } from '../ai/gemini.js';
-import { shouldRunAnalysis, analyzeConversation, getFiredTriggers } from '../ai/analysis.js';
+import { shouldRunAnalysis, analyzeConversation, getFiredTriggers, analyzePromptSafety, shouldAnalyzeForSecurity } from '../ai/analysis.js';
 import { checkKeywordTriggers, executeActionsForTrigger } from '../actions/executor.js';
 import { pushNewGuestMessage } from '../notifications/push.js';
 import { sendSuperadminAlert } from '../notifications/email.js';
 
 const SUPERADMIN_EMAIL = 'eric@eryai.tech';
 
+// Risk level threshold for blocking
+const RISK_THRESHOLD_BLOCK = 7;  // 7-10 = block and alert
+const RISK_THRESHOLD_LOG = 4;    // 4-6 = log but allow
+
 // ============================================
 // MAIN CHAT ENGINE
 // ============================================
-export async function handleChat({ prompt, history, sessionId, customerId, slug, companion, isTestMode, suspicious, suspiciousReason }) {
+export async function handleChat({ prompt, history, sessionId, customerId, slug, companion, isTestMode }) {
   
   // ============================================
   // STEP 1: Identify customer
@@ -88,7 +92,30 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   console.log(`📋 Loaded ${actions.length} actions`);
 
   // ============================================
-  // STEP 3: Get or create session
+  // STEP 3: AI-POWERED SECURITY CHECK
+  // Replace hardcoded keywords with intelligent analysis
+  // ============================================
+  let securityAnalysis = { suspicious: false, reason: null, riskLevel: 0 };
+  
+  // Determine customer type for context-aware security
+  const customerType = slug?.includes('eldercare') || companion ? 'eldercare' : 'restaurant';
+  
+  // Only analyze if message looks potentially suspicious (saves API calls)
+  if (shouldAnalyzeForSecurity(prompt)) {
+    console.log('🔍 Running AI security analysis...');
+    securityAnalysis = await analyzePromptSafety(prompt, customerType);
+    console.log(`🔍 Security result: Risk ${securityAnalysis.riskLevel}/10 - ${securityAnalysis.reason}`);
+  }
+
+  const isSuspicious = securityAnalysis.riskLevel >= RISK_THRESHOLD_BLOCK;
+  const isWarning = securityAnalysis.riskLevel >= RISK_THRESHOLD_LOG && securityAnalysis.riskLevel < RISK_THRESHOLD_BLOCK;
+
+  if (isWarning) {
+    console.warn(`⚠️ [SECURITY WARNING] Risk ${securityAnalysis.riskLevel}/10: "${prompt.substring(0, 50)}..." - ${securityAnalysis.reason}`);
+  }
+
+  // ============================================
+  // STEP 4: Get or create session
   // ============================================
   let currentSessionId = sessionId;
   let existingSession = null;
@@ -119,29 +146,35 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   }
 
   // ============================================
-  // STEP 3.5: Handle suspicious sessions
+  // STEP 5: Handle suspicious sessions (risk >= 7)
   // ============================================
-  if (suspicious && currentSessionId) {
+  if (isSuspicious && currentSessionId) {
     console.warn(`🚨 [SECURITY] Suspicious activity detected!`);
     console.warn(`Session: ${currentSessionId}`);
-    console.warn(`Reason: ${suspiciousReason}`);
-    console.warn(`Prompt: "${prompt.substring(0, 50)}..."`);
+    console.warn(`Risk Level: ${securityAnalysis.riskLevel}/10`);
+    console.warn(`Reason: ${securityAnalysis.reason}`);
+    console.warn(`Prompt: "${prompt.substring(0, 100)}..."`);
 
     // Flag session and route to superadmin
     await updateSession(currentSessionId, {
       suspicious: true,
-      suspicious_reason: suspiciousReason,
+      suspicious_reason: securityAnalysis.reason,
+      risk_level: securityAnalysis.riskLevel,
       routed_to_superadmin: true
     });
+
+    // Save the suspicious message
+    await saveMessage(currentSessionId, 'user', prompt, 'user');
 
     // Send security alert email to superadmin
     try {
       await sendSuperadminAlert({
         to: SUPERADMIN_EMAIL,
-        subject: `🚨 [SECURITY] Suspicious Activity - ${customer.name}`,
+        subject: `🚨 [SECURITY] Risk ${securityAnalysis.riskLevel}/10 - ${customer.name}`,
         customerName: customer.name,
         sessionId: currentSessionId,
-        reason: suspiciousReason,
+        reason: securityAnalysis.reason,
+        riskLevel: securityAnalysis.riskLevel,
         prompt: prompt,
         isTestMode
       });
@@ -149,10 +182,31 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
     } catch (emailError) {
       console.error('❌ Failed to send security alert:', emailError.message);
     }
+
+    // Return a safe, non-technical response
+    // The AI stays in character and doesn't acknowledge the security system
+    const safeResponse = customerType === 'eldercare'
+      ? 'Beklager, jeg forstår ikke helt hva du mener. Skal vi snakke om noe hyggelig i stedet?'
+      : 'Jeg forstår dessverre ikke spørsmålet. Kan jeg hjelpe deg med noe annet?';
+
+    // Save the safe response
+    await saveMessage(currentSessionId, 'assistant', safeResponse, 'ai');
+
+    return {
+      response: safeResponse,
+      sessionId: currentSessionId,
+      customerId: customer.id,
+      customerName: customer.name,
+      aiName: effectiveAiConfig.ai_name,
+      triggeredActions: [],
+      needsHandoff: false,
+      suspicious: true,
+      riskLevel: securityAnalysis.riskLevel
+    };
   }
 
   // ============================================
-  // STEP 4: Check if human took over
+  // STEP 6: Check if human took over
   // ============================================
   let humanTookOver = false;
 
@@ -172,15 +226,18 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   }
 
   // ============================================
-  // STEP 5: Save user message
+  // STEP 7: Save user message
   // ============================================
   if (currentSessionId) {
     await saveMessage(currentSessionId, 'user', prompt, 'user');
-    await updateSession(currentSessionId, {});
+    await updateSession(currentSessionId, {
+      // Store risk level even for non-suspicious messages (for analytics)
+      risk_level: securityAnalysis.riskLevel
+    });
   }
 
   // ============================================
-  // STEP 6: If human took over, send push and return
+  // STEP 8: If human took over, send push and return
   // ============================================
   if (humanTookOver && currentSessionId) {
     const guestName = existingSession?.metadata?.guest_name || 'Gäst';
@@ -196,12 +253,12 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   }
 
   // ============================================
-  // STEP 7: Check keyword triggers
+  // STEP 9: Check keyword triggers
   // ============================================
   const triggeredActions = checkKeywordTriggers(prompt, actions);
 
   // ============================================
-  // STEP 8: Build system prompt and call AI
+  // STEP 10: Build system prompt and call AI
   // ============================================
   const systemPrompt = buildSystemPrompt(effectiveAiConfig, triggeredActions);
   const contents = buildChatContents(systemPrompt, effectiveAiConfig.greeting, history, prompt);
@@ -219,7 +276,7 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   }
 
   // ============================================
-  // STEP 9: Save AI response
+  // STEP 11: Save AI response
   // ============================================
   if (currentSessionId && aiResponse) {
     await saveMessage(currentSessionId, 'assistant', aiResponse, 'ai');
@@ -227,25 +284,7 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   }
 
   // ============================================
-  // STEP 10: Skip analysis for suspicious sessions
-  // Superadmin already notified - don't spam the customer
-  // ============================================
-  if (suspicious) {
-    console.log('⏭️ Skipping analysis for suspicious session - superadmin already notified');
-    return {
-      response: aiResponse,
-      sessionId: currentSessionId,
-      customerId: customer.id,
-      customerName: customer.name,
-      aiName: effectiveAiConfig.ai_name,
-      triggeredActions: triggeredActions.map(a => a.action_type),
-      needsHandoff: false,
-      suspicious: true
-    };
-  }
-
-  // ============================================
-  // STEP 11: Run analysis (AWAIT to ensure completion)
+  // STEP 12: Run analysis (AWAIT to ensure completion)
   // ============================================
   if (currentSessionId && analysisConfig) {
     console.log('🔄 Starting analysis step...');
@@ -270,7 +309,7 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   }
 
   // ============================================
-  // STEP 12: Return response
+  // STEP 13: Return response
   // ============================================
   return {
     response: aiResponse,
@@ -281,7 +320,8 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
     companion: companion || null,
     triggeredActions: triggeredActions.map(a => a.action_type),
     needsHandoff: false,
-    suspicious: suspicious || false
+    suspicious: false,
+    riskLevel: securityAnalysis.riskLevel
   };
 }
 
