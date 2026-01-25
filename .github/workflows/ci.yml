@@ -1,47 +1,23 @@
-name: CI Validation
+name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  check:
-    name: Type Check and Build
+  trigger-central:
+    name: Trigger Central Validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-      
-      - name: Install dependencies
-        run: npm install
-      
-      - name: Type Check (JSDoc)
-        run: |
-          if [ -f "jsconfig.json" ]; then
-            npx tsc --project jsconfig.json --skipLibCheck --maxNodeModuleJsDepth 0
-          else
-            echo "No jsconfig.json found, skipping type check"
-          fi
-      
-      - name: Build
-        run: |
-          if grep -q '"build"' package.json 2>/dev/null; then
-            echo "Running build..."
-            npm run build
-          else
-            echo "No build script found, skipping"
-          fi
+      - name: Notify Hub
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          curl -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/eryai-tech/eryai-core-schema/dispatches \
+            -d '{"event_type":"repo_push","client_payload":{"repo":"${{ github.repository }}","ref":"${{ github.ref }}","sha":"${{ github.sha }}"}}'
+          echo "✅ Triggered central CI for ${{ github.repository }}"
