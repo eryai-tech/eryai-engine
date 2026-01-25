@@ -66,6 +66,31 @@ export async function getActiveActions(customerId) {
 }
 
 // ============================================
+// COMPANION QUERIES (for Mimre/ElderCare)
+// ============================================
+export async function getCompanion(customerId, companionKey) {
+  const { data } = await getSupabase()
+    .from('customer_companions')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('companion_key', companionKey)
+    .eq('is_active', true)
+    .single();
+  return data;
+}
+
+export async function getDefaultCompanion(customerId) {
+  const { data } = await getSupabase()
+    .from('customer_companions')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('is_default', true)
+    .eq('is_active', true)
+    .single();
+  return data;
+}
+
+// ============================================
 // SESSION QUERIES
 // ============================================
 export async function getSession(sessionId) {
