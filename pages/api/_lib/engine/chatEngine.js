@@ -13,7 +13,7 @@ import {
 } from '../db/supabase.js';
 
 import { callGemini, buildChatContents, buildSystemPrompt } from '../ai/gemini.js';
-import { shouldRunAnalysis, analyzeConversation, getFiredTriggers, analyzePromptSafety, shouldAnalyzeForSecurity } from '../ai/analysis.js';
+import { shouldRunAnalysis, analyzeConversation, getFiredTriggers, analyzePromptSafety } from '../ai/analysis.js';
 import { checkKeywordTriggers, executeActionsForTrigger } from '../actions/executor.js';
 import { pushNewGuestMessage } from '../notifications/push.js';
 import { sendSuperadminAlert } from '../notifications/email.js';
@@ -93,19 +93,18 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
 
   // ============================================
   // STEP 3: AI-POWERED SECURITY CHECK
-  // Replace hardcoded keywords with intelligent analysis
+  // Always analyze ALL messages (costs ~$0.001 per check)
+  // This catches threats in ALL languages
   // ============================================
   let securityAnalysis = { suspicious: false, reason: null, riskLevel: 0 };
   
   // Determine customer type for context-aware security
   const customerType = slug?.includes('eldercare') || companion ? 'eldercare' : 'restaurant';
   
-  // Only analyze if message looks potentially suspicious (saves API calls)
-  if (shouldAnalyzeForSecurity(prompt)) {
-    console.log('🔍 Running AI security analysis...');
-    securityAnalysis = await analyzePromptSafety(prompt, customerType);
-    console.log(`🔍 Security result: Risk ${securityAnalysis.riskLevel}/10 - ${securityAnalysis.reason}`);
-  }
+  // Always run AI security analysis
+  console.log('🔍 Running AI security analysis...');
+  securityAnalysis = await analyzePromptSafety(prompt, customerType);
+  console.log(`🔍 Security result: Risk ${securityAnalysis.riskLevel}/10 - ${securityAnalysis.reason}`);
 
   const isSuspicious = securityAnalysis.riskLevel >= RISK_THRESHOLD_BLOCK;
   const isWarning = securityAnalysis.riskLevel >= RISK_THRESHOLD_LOG && securityAnalysis.riskLevel < RISK_THRESHOLD_BLOCK;
