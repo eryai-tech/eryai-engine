@@ -4,6 +4,7 @@ import {
   getAiConfig,
   getAnalysisConfig,
   getActiveActions,
+  getCompanion,
   getSession,
   createSession,
   updateSession,
@@ -22,7 +23,7 @@ const SUPERADMIN_EMAIL = 'eric@eryai.tech';
 // ============================================
 // MAIN CHAT ENGINE
 // ============================================
-export async function handleChat({ prompt, history, sessionId, customerId, slug, isTestMode, suspicious, suspiciousReason }) {
+export async function handleChat({ prompt, history, sessionId, customerId, slug, companion, isTestMode, suspicious, suspiciousReason }) {
   
   // ============================================
   // STEP 1: Identify customer
@@ -55,7 +56,35 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
     return { error: 'AI configuration not found', status: 500 };
   }
 
-  console.log(`🤖 AI loaded: ${aiConfig.ai_name} (${aiConfig.ai_role})`);
+  // ============================================
+  // STEP 2.5: Check for companion override (Mimre/ElderCare)
+  // ============================================
+  let effectiveAiConfig = aiConfig;
+  let companionData = null;
+
+  if (companion) {
+    companionData = await getCompanion(customer.id, companion);
+    
+    if (companionData) {
+      console.log(`👤 Companion loaded: ${companionData.ai_name} (${companionData.companion_key})`);
+      
+      // Override AI config with companion settings
+      effectiveAiConfig = {
+        ...aiConfig,
+        ai_name: companionData.ai_name,
+        ai_role: companionData.ai_role || aiConfig.ai_role,
+        greeting: companionData.greeting || aiConfig.greeting,
+        system_prompt: companionData.system_prompt,
+        knowledge_base: companionData.knowledge_base || aiConfig.knowledge_base,
+        temperature: companionData.temperature || aiConfig.temperature,
+        max_tokens: companionData.max_tokens || aiConfig.max_tokens
+      };
+    } else {
+      console.warn(`⚠️ Companion '${companion}' not found for customer ${customer.id}`);
+    }
+  }
+
+  console.log(`🤖 AI loaded: ${effectiveAiConfig.ai_name} (${effectiveAiConfig.ai_role})`);
   console.log(`📋 Loaded ${actions.length} actions`);
 
   // ============================================
@@ -69,10 +98,18 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   }
 
   if (!currentSessionId) {
-    const newSession = await createSession(customer.id, {
+    const sessionMetadata = {
       source: 'eryai-engine',
       is_test: isTestMode
-    });
+    };
+
+    // Store companion in session metadata if used
+    if (companion && companionData) {
+      sessionMetadata.companion = companion;
+      sessionMetadata.companion_name = companionData.ai_name;
+    }
+
+    const newSession = await createSession(customer.id, sessionMetadata);
 
     if (newSession) {
       currentSessionId = newSession.id;
@@ -166,15 +203,15 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
   // ============================================
   // STEP 8: Build system prompt and call AI
   // ============================================
-  const systemPrompt = buildSystemPrompt(aiConfig, triggeredActions);
-  const contents = buildChatContents(systemPrompt, aiConfig.greeting, history, prompt);
+  const systemPrompt = buildSystemPrompt(effectiveAiConfig, triggeredActions);
+  const contents = buildChatContents(systemPrompt, effectiveAiConfig.greeting, history, prompt);
 
   let aiResponse = '';
 
   try {
     aiResponse = await callGemini(contents, {
-      temperature: aiConfig.temperature || 0.7,
-      maxOutputTokens: aiConfig.max_tokens || 500
+      temperature: effectiveAiConfig.temperature || 0.7,
+      maxOutputTokens: effectiveAiConfig.max_tokens || 500
     });
   } catch (err) {
     console.error('Gemini error:', err);
@@ -200,7 +237,7 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
       sessionId: currentSessionId,
       customerId: customer.id,
       customerName: customer.name,
-      aiName: aiConfig.ai_name,
+      aiName: effectiveAiConfig.ai_name,
       triggeredActions: triggeredActions.map(a => a.action_type),
       needsHandoff: false,
       suspicious: true
@@ -223,7 +260,7 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
     await runAnalysis(
       currentSessionId,
       customer,
-      aiConfig,
+      effectiveAiConfig,
       analysisConfig,
       actions,
       fullConversation,
@@ -240,7 +277,8 @@ export async function handleChat({ prompt, history, sessionId, customerId, slug,
     sessionId: currentSessionId,
     customerId: customer.id,
     customerName: customer.name,
-    aiName: aiConfig.ai_name,
+    aiName: effectiveAiConfig.ai_name,
+    companion: companion || null,
     triggeredActions: triggeredActions.map(a => a.action_type),
     needsHandoff: false,
     suspicious: suspicious || false
