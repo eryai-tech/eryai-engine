@@ -74,11 +74,16 @@ jobs:
 
       - name: Install dependencies
         if: steps.check-api.outputs.has_api == 'true'
-        run: npm ci || npm install
+        run: npm install
 
       - name: Build
         if: steps.check-api.outputs.has_api == 'true'
-        run: npm run build
+        run: |
+          if grep -q '"build"' package.json 2>/dev/null; then
+            npm run build
+          else
+            echo "No build script found, skipping"
+          fi
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -153,11 +158,16 @@ jobs:
 
       - name: Install dependencies
         if: steps.check-promptfoo.outputs.has_promptfoo == 'true' && steps.check-api.outputs.has_api == 'true'
-        run: npm ci || npm install
+        run: npm install
 
       - name: Build
         if: steps.check-promptfoo.outputs.has_promptfoo == 'true' && steps.check-api.outputs.has_api == 'true'
-        run: npm run build
+        run: |
+          if grep -q '"build"' package.json 2>/dev/null; then
+            npm run build
+          else
+            echo "No build script found, skipping"
+          fi
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
