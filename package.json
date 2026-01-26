@@ -4,7 +4,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "next-swagger-doc": "^0.4.0",
-    "schemathesis": "^3.0.0",
     "wait-on": "^7.2.0",
     "promptfoo": "^0.80.0"
   },
