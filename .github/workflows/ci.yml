@@ -108,7 +108,8 @@ jobs:
         if: steps.check-api.outputs.has_api == 'true'
         run: |
           if curl -s http://localhost:3000/api/openapi.json | grep -q '"paths"'; then
-            npx schemathesis run http://localhost:3000/api/openapi.json \
+            docker run --network host schemathesis/schemathesis:stable \
+              run http://localhost:3000/api/openapi.json \
               --checks all \
               --header "X-Internal-API-Key: ${{ secrets.INTERNAL_API_KEY }}" \
               --header "X-Test-Mode: true" \
